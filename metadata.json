@@ -1,0 +1,6 @@
+{
+  "name": "Ayni.pe",
+  "description": "Plataforma peruana que conecta usuarios con técnicos, trabajadores y freelancers verificados de manera rápida, segura y confiable.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
