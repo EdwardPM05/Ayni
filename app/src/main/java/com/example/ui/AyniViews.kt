@@ -86,14 +86,6 @@ fun AyniLogo(
                         letterSpacing = (-0.5).sp
                     )
                 )
-                Text(
-                    text = ".pe",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = (24 * sizeScale).sp,
-                        color = Terracotta
-                    )
-                )
             }
         }
 

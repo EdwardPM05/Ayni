@@ -24,6 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -79,10 +81,10 @@ fun MainAppScreen() {
             AnimatedContent(
                 targetState = currentScreen,
                 transitionSpec = {
-                    if (targetState == "profile" || targetState == "chat_liz" || targetState == "dashboard") {
+                    if (targetState == "profile" || targetState == "chat_liz" || targetState == "dashboard" || targetState == "map") {
                         (slideInHorizontally { width -> width / 4 } + fadeIn(animationSpec = tween(300))) togetherWith
                             (slideOutHorizontally { width -> -width / 4 } + fadeOut(animationSpec = tween(300)))
-                    } else if (initialState == "profile" || initialState == "chat_liz" || initialState == "dashboard") {
+                    } else if (initialState == "profile" || initialState == "chat_liz" || initialState == "dashboard" || initialState == "map") {
                         (slideInHorizontally { width -> -width / 4 } + fadeIn(animationSpec = tween(300))) togetherWith
                             (slideOutHorizontally { width -> width / 4 } + fadeOut(animationSpec = tween(300)))
                     } else {
@@ -99,6 +101,7 @@ fun MainAppScreen() {
                     "support_bot" -> SupportBotScreen(viewModel = viewModel)
                     "dashboard" -> DashboardScreen(viewModel = viewModel)
                     "login" -> LoginRegisterScreen(viewModel = viewModel)
+                    "map" -> MapScreen(viewModel = viewModel)
                 }
             }
 
@@ -117,7 +120,7 @@ fun AyniHeader(viewModel: AyniViewModel) {
     val isHome = currentScreen == "home"
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().statusBarsPadding(),
         color = Color.White,
         shadowElevation = 4.dp
     ) {
@@ -863,14 +866,43 @@ fun SearchScreen(viewModel: AyniViewModel) {
                         .height(if (isTablet) 240.dp else 180.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .border(1.dp, GrayBorder, RoundedCornerShape(16.dp))
+                        .clickable { viewModel.navigateWithHistory("map") }
                 ) {
                     DrawSimulatedMap(
                         isLocationFound = showNearbyProfessionals,
                         onPinClicked = { name ->
-                            if (name.contains("Liz")) viewModel.navigateWithHistory("profile")
+                            viewModel.navigateWithHistory("map")
                         },
                         modifier = Modifier.fillMaxSize()
                     )
+
+                    // Fullscreen map button overlay
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .background(Color.White.copy(alpha = 0.95f), RoundedCornerShape(8.dp))
+                            .border(1.dp, Gold.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Map,
+                                contentDescription = "Ver mapa completo",
+                                tint = Terracotta,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "Pantalla completa 🗺️",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DarkBrown
+                            )
+                        }
+                    }
 
                     // Scanning overlay
                     if (isSimulatingLocation) {
@@ -888,9 +920,10 @@ fun SearchScreen(viewModel: AyniViewModel) {
                         }
                     }
 
-                    // Interactive Decorator Overlay matching the specific trigger
-                    val queryMatchesDecor = searchQuery.lowercase().contains("decor") || selectedCategory == "Decoración"
-                    if (showNearbyProfessionals && queryMatchesDecor && !isSimulatingLocation) {
+                    // Dynamic Map Overlay matching the active filter list
+                    val showOverlay = showNearbyProfessionals && !isSimulatingLocation && technicians.isNotEmpty()
+                    if (showOverlay) {
+                        val activeTech = technicians.first()
                         Card(
                             shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -900,7 +933,10 @@ fun SearchScreen(viewModel: AyniViewModel) {
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
                                 .padding(10.dp)
-                                .clickable { viewModel.navigateWithHistory("profile") }
+                                .clickable {
+                                    viewModel.selectTechnician(activeTech)
+                                    viewModel.navigateWithHistory("profile")
+                                }
                         ) {
                             Row(
                                 modifier = Modifier.padding(10.dp),
@@ -911,16 +947,22 @@ fun SearchScreen(viewModel: AyniViewModel) {
                                         .size(44.dp)
                                         .clip(CircleShape)
                                 ) {
-                                    DrawLizAvatar(modifier = Modifier.fillMaxSize())
+                                    DrawTechnicianAvatar(techId = activeTech.id, name = activeTech.name, modifier = Modifier.fillMaxSize())
                                 }
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
                                         Text(
-                                            text = "Liz Evelyn Obregon",
+                                            text = activeTech.name,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 13.sp,
-                                            color = DarkBrown
+                                            color = DarkBrown,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Box(
@@ -931,11 +973,14 @@ fun SearchScreen(viewModel: AyniViewModel) {
                                             Text("Disponible Hoy", fontSize = 8.sp, color = GreenEscrow, fontWeight = FontWeight.Bold)
                                         }
                                     }
-                                    Text("Decoradora de Eventos • S/ 120 - 750", fontSize = 11.sp, color = TextLight)
-                                    Text("📍 Av. 3 de Octubre: Villa El Salvador (A 1.2 km)", fontSize = 10.sp, color = Terracotta, fontWeight = FontWeight.Bold)
+                                    Text("${activeTech.category} • ${activeTech.basePriceRange}", fontSize = 11.sp, color = TextLight)
+                                    Text("📍 ${activeTech.locationDescription} (A ${activeTech.distanceKm} km)", fontSize = 10.sp, color = Terracotta, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                                 IconButton(
-                                    onClick = { viewModel.navigateWithHistory("profile") },
+                                    onClick = {
+                                        viewModel.selectTechnician(activeTech)
+                                        viewModel.navigateWithHistory("profile")
+                                    },
                                     modifier = Modifier.background(LightTerracotta, CircleShape).size(36.dp)
                                 ) {
                                     Icon(Icons.Default.ChevronRight, contentDescription = "Ver Perfil", tint = Terracotta)
@@ -972,9 +1017,8 @@ fun SearchScreen(viewModel: AyniViewModel) {
                             ProfessionalCard(
                                 tech = tech,
                                 onClick = {
-                                    if (tech.id == "liz_evelyn") {
-                                        viewModel.navigateWithHistory("profile")
-                                    }
+                                    viewModel.selectTechnician(tech)
+                                    viewModel.navigateWithHistory("profile")
                                 }
                             )
                         }
@@ -1007,6 +1051,8 @@ fun SearchScreen(viewModel: AyniViewModel) {
                 ) {
                     GeolocationAndMapBlock()
                     // Add a tablet-only Mini Profile Preview block
+                    val selectedTechState by viewModel.selectedTechnician.collectAsState()
+                    val previewTech = selectedTechState ?: viewModel.lizEvelyn
                     Card(
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1015,15 +1061,18 @@ fun SearchScreen(viewModel: AyniViewModel) {
                     ) {
                         Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                             Box(modifier = Modifier.size(64.dp).clip(CircleShape)) {
-                                DrawLizAvatar(modifier = Modifier.fillMaxSize())
+                                DrawTechnicianAvatar(techId = previewTech.id, name = previewTech.name, modifier = Modifier.fillMaxSize())
                             }
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("Liz Evelyn Obregon", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = DarkBrown)
-                            Text("Decoradora de Eventos • 537 trabajos", fontSize = 11.sp, color = TextLight)
+                            Text(previewTech.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = DarkBrown, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${previewTech.category} • ${previewTech.completedJobs} trabajos", fontSize = 11.sp, color = TextLight)
                             Spacer(modifier = Modifier.height(10.dp))
                             AyniButton(
                                 text = "Ver Perfil Completo",
-                                onClick = { viewModel.navigateWithHistory("profile") },
+                                onClick = {
+                                    viewModel.selectTechnician(previewTech)
+                                    viewModel.navigateWithHistory("profile")
+                                },
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -1031,14 +1080,40 @@ fun SearchScreen(viewModel: AyniViewModel) {
                 }
             }
         } else {
-            // Mobile vertical layout
-            Column(
+            // Mobile vertical layout - fully scrollable together to show professionals nicely
+            LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
-                SearchControlsBlock()
-                GeolocationAndMapBlock()
-                ProfessionalsListBlock(modifier = Modifier.weight(1f))
+                item {
+                    SearchControlsBlock()
+                }
+                item {
+                    GeolocationAndMapBlock()
+                }
+                item {
+                    Text(
+                        text = "Profesionales Disponibles (${technicians.size})",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = DarkBrown),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                if (isFilteringLoading) {
+                    items(3) {
+                        ShimmerSearchCard()
+                    }
+                } else {
+                    items(technicians) { tech ->
+                        ProfessionalCard(
+                            tech = tech,
+                            onClick = {
+                                viewModel.selectTechnician(tech)
+                                viewModel.navigateWithHistory("profile")
+                            }
+                        )
+                    }
+                }
             }
         }
     }
@@ -1048,12 +1123,12 @@ fun SearchScreen(viewModel: AyniViewModel) {
 fun DrawTechnicianAvatar(techId: String, name: String, modifier: Modifier = Modifier) {
     val imageUrl = when (techId) {
         "liz_evelyn" -> "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=256"
-        "carlos_soto" -> "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=256"
-        "sofia_ruiz" -> "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=256"
-        "mateo_quispe" -> "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=256"
-        "elena_huaman" -> "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=256"
-        "raul_carpintero" -> "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=256"
-        "ana_diseno" -> "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256"
+        "carlos_soto" -> "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&q=80&w=256" // Electrician at work
+        "sofia_ruiz" -> "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&q=80&w=256" // Gasfiter / plumber specialist
+        "mateo_quispe" -> "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&q=80&w=256" // Developer with laptop
+        "elena_huaman" -> "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&q=80&w=256" // Cleaning service professional
+        "raul_carpintero" -> "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=256" // Wood craftsman / carpenter
+        "ana_diseno" -> "https://images.unsplash.com/photo-1586075010923-2dd4570fb338?auto=format&fit=crop&q=80&w=256" // Designer sketching branding
         else -> null
     }
 
@@ -1122,14 +1197,18 @@ fun ProfessionalCard(tech: Technician, onClick: () -> Unit) {
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
                         text = tech.name,
                         fontWeight = FontWeight.Bold,
                         color = DarkBrown,
                         fontSize = 14.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Box(
@@ -1137,7 +1216,13 @@ fun ProfessionalCard(tech: Technician, onClick: () -> Unit) {
                             .background(LightTerracotta, RoundedCornerShape(4.dp))
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
-                        Text(tech.category, fontSize = 9.sp, color = Terracotta, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = tech.category,
+                            fontSize = 9.sp,
+                            color = Terracotta,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
                     }
                 }
 
@@ -1166,11 +1251,412 @@ fun ProfessionalCard(tech: Technician, onClick: () -> Unit) {
 }
 
 /**
+ * Interactive Full-Screen Map of Nearby Professionals
+ */
+@Composable
+fun MapScreen(viewModel: AyniViewModel) {
+    val allTechs = viewModel.allTechniciansList
+    val showNearby by viewModel.showNearbyProfessionals.collectAsState()
+    val isSimulatingLocation by viewModel.isSimulatingLocation.collectAsState()
+
+    var selectedMapCategory by remember { mutableStateOf("Todos") }
+    var selectedMapTech by remember { mutableStateOf<Technician?>(null) }
+
+    val categories = listOf("Todos", "Decoración", "Electricista", "Gasfitería", "Limpieza", "Carpintería")
+
+    // Filter displayed technicians based on selected filter pill
+    val displayedTechs = remember(selectedMapCategory, showNearby) {
+        if (!showNearby) emptyList()
+        else if (selectedMapCategory == "Todos") allTechs
+        else allTechs.filter { it.category == selectedMapCategory }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Top Filter Bar
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color.White,
+            shadowElevation = 2.dp
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = "Filtro de Especialidad",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = DarkBrown,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) {
+                    items(categories) { cat ->
+                        val isSelected = selectedMapCategory == cat
+                        val bg = if (isSelected) Terracotta else Color(0xFFF5F2EB)
+                        val textCol = if (isSelected) Color.White else DarkBrown
+                        val borderCol = if (isSelected) Terracotta else GrayBorder
+
+                        Box(
+                            modifier = Modifier
+                                .background(bg, RoundedCornerShape(20.dp))
+                                .border(1.dp, borderCol, RoundedCornerShape(20.dp))
+                                .clickable {
+                                    selectedMapCategory = cat
+                                    // Reset selected technician if they are filtered out
+                                    if (selectedMapTech != null && cat != "Todos" && selectedMapTech?.category != cat) {
+                                        selectedMapTech = null
+                                    }
+                                }
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = cat,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textCol
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Map Area
+        BoxWithConstraints(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .background(Color(0xFFF1EDE6))
+        ) {
+            val w = maxWidth
+            val h = maxHeight
+
+            // Streets, River, Parks drawn on background Canvas
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val canvasW = size.width
+                val canvasH = size.height
+
+                // Draw green parks
+                drawRoundRect(Color(0xFFC8E6C9), Offset(canvasW * 0.05f, canvasH * 0.1f), Size(canvasW * 0.35f, canvasH * 0.22f), CornerRadius(16f, 16f))
+                drawRoundRect(Color(0xFFC8E6C9), Offset(canvasW * 0.55f, canvasH * 0.55f), Size(canvasW * 0.40f, canvasH * 0.30f), CornerRadius(16f, 16f))
+                drawRoundRect(Color(0xFFC8E6C9), Offset(canvasW * 0.1f, canvasH * 0.7f), Size(canvasW * 0.3f, canvasH * 0.18f), CornerRadius(16f, 16f))
+
+                // Draw water river
+                val riverPath = Path().apply {
+                    moveTo(0f, canvasH * 0.85f)
+                    cubicTo(canvasW * 0.25f, canvasH * 0.88f, canvasW * 0.60f, canvasH * 0.78f, canvasW, canvasH * 0.95f)
+                    lineTo(canvasW, canvasH)
+                    lineTo(0f, canvasH)
+                    close()
+                }
+                drawPath(riverPath, Color(0xFFB2EBF2))
+
+                // Draw streets
+                val strokeRoad = 24f
+                val roadColor = Color.White
+                // Horizontal streets
+                drawLine(roadColor, Offset(0f, canvasH * 0.15f), Offset(canvasW, canvasH * 0.15f), strokeWidth = strokeRoad)
+                drawLine(roadColor, Offset(0f, canvasH * 0.35f), Offset(canvasW, canvasH * 0.35f), strokeWidth = strokeRoad)
+                drawLine(roadColor, Offset(0f, canvasH * 0.55f), Offset(canvasW, canvasH * 0.55f), strokeWidth = strokeRoad)
+                drawLine(roadColor, Offset(0f, canvasH * 0.78f), Offset(canvasW, canvasH * 0.78f), strokeWidth = strokeRoad)
+                // Vertical streets
+                drawLine(roadColor, Offset(canvasW * 0.20f, 0f), Offset(canvasW * 0.20f, canvasH), strokeWidth = strokeRoad)
+                drawLine(roadColor, Offset(canvasW * 0.45f, 0f), Offset(canvasW * 0.45f, canvasH), strokeWidth = strokeRoad)
+                drawLine(roadColor, Offset(canvasW * 0.72f, 0f), Offset(canvasW * 0.72f, canvasH), strokeWidth = strokeRoad)
+                drawLine(roadColor, Offset(canvasW * 0.90f, 0f), Offset(canvasW * 0.90f, canvasH), strokeWidth = strokeRoad)
+            }
+
+            // User GPS Location (pulsing center point)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(60.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Infinite scaling pulsing blue circle
+                val transition = rememberInfiniteTransition(label = "pulse")
+                val scale by transition.animateFloat(
+                    initialValue = 0.5f,
+                    targetValue = 1.6f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1500, easing = LinearOutSlowInEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "scale"
+                )
+                val alpha by transition.animateFloat(
+                    initialValue = 0.6f,
+                    targetValue = 0.0f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1500, easing = LinearOutSlowInEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "alpha"
+                )
+
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawCircle(
+                        color = Color(0xFF2979FF),
+                        radius = size.minDimension / 2 * scale,
+                        alpha = alpha
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .background(Color.White, CircleShape)
+                        .border(3.dp, Color(0xFF2979FF), CircleShape)
+                )
+            }
+
+            // GPS Simulation Loader Overlay
+            if (isSimulatingLocation) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.White.copy(alpha = 0.6f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = Terracotta)
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text("Buscando profesionales con GPS...", fontWeight = FontWeight.Bold, color = Terracotta)
+                    }
+                }
+            } else if (!showNearby) {
+                // Prompt to turn on GPS if not yet simulated
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.White.copy(alpha = 0.8f))
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.dp, GrayBorder),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                        modifier = Modifier.fillMaxWidth().widthIn(max = 400.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Default.MyLocation, contentDescription = null, tint = Terracotta, modifier = Modifier.size(48.dp))
+                            Text("Activar Escaneo de Cercanía", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = DarkBrown)
+                            Text(
+                                text = "Usa el GPS simulado para ubicar a todos los profesionales calificados más cercanos a tu vivienda.",
+                                textAlign = TextAlign.Center,
+                                fontSize = 13.sp,
+                                color = TextLight
+                            )
+                            AyniButton(
+                                text = "Escanear con GPS",
+                                onClick = { viewModel.simulateGeolocation() },
+                                icon = Icons.Default.MyLocation,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Real Interactive technician pins as absolute elements
+            displayedTechs.forEach { tech ->
+                val mapX = (0.5f + tech.lngOffset * 4.2f).coerceIn(0.08f, 0.92f)
+                val mapY = (0.5f - tech.latOffset * 4.2f).coerceIn(0.12f, 0.88f)
+
+                val isSelected = selectedMapTech?.id == tech.id
+                val markerColor = when (tech.category) {
+                    "Decoración" -> Terracotta
+                    "Electricista" -> Gold
+                    "Gasfitería" -> Color(0xFF00796B)
+                    "Limpieza" -> DarkBrown
+                    "Carpintería" -> Color(0xFFD84315)
+                    else -> Color(0xFF5D4037)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .offset(
+                            x = w * mapX - 25.dp,
+                            y = h * mapY - 50.dp
+                        )
+                        .size(50.dp, 60.dp)
+                        .clickable { selectedMapTech = tech }
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(
+                                    if (isSelected) Color.White else markerColor,
+                                    CircleShape
+                                )
+                                .border(2.dp, if (isSelected) Terracotta else Color.White, CircleShape)
+                                .padding(2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize().clip(CircleShape)) {
+                                DrawTechnicianAvatar(techId = tech.id, name = tech.name, modifier = Modifier.fillMaxSize())
+                            }
+                        }
+
+                        // Pin Pointer Triangle
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .background(
+                                    if (isSelected) Terracotta else markerColor,
+                                    RoundedCornerShape(bottomStart = 2.dp, bottomEnd = 2.dp)
+                                )
+                        )
+
+                        // Tag label under
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    if (isSelected) Terracotta else Color.White.copy(alpha = 0.9f),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .border(1.dp, if (isSelected) Color.White else markerColor, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = tech.name.substringBefore(" "),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.White else DarkBrown
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Selected Technician Card Popup at the bottom
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp)
+                    .fillMaxWidth()
+                    .widthIn(max = 500.dp)
+            ) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = selectedMapTech != null,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                ) {
+                    selectedMapTech?.let { tech ->
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                            border = BorderStroke(1.5.dp, Terracotta)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(54.dp)
+                                            .clip(CircleShape)
+                                            .border(2.dp, Terracotta, CircleShape)
+                                    ) {
+                                        DrawTechnicianAvatar(techId = tech.id, name = tech.name, modifier = Modifier.fillMaxSize())
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = tech.name,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp,
+                                                color = DarkBrown,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(LightTerracotta, RoundedCornerShape(4.dp))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(tech.category, fontSize = 9.sp, color = Terracotta, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Star, contentDescription = null, tint = Gold, modifier = Modifier.size(14.dp))
+                                            Text("${tech.rating} (${tech.completedJobs} trab.)", fontSize = 11.sp, color = DarkBrown, fontWeight = FontWeight.Bold)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = Terracotta, modifier = Modifier.size(12.dp))
+                                            Text("A ${tech.distanceKm} km", fontSize = 11.sp, color = TextLight)
+                                        }
+                                    }
+
+                                    IconButton(
+                                        onClick = { selectedMapTech = null },
+                                        modifier = Modifier.background(Color(0xFFF5F2EB), CircleShape).size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "Cerrar", tint = DarkBrown, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            viewModel.selectTechnician(tech)
+                                            viewModel.navigateWithHistory("chat_liz")
+                                        },
+                                        border = BorderStroke(1.dp, Terracotta),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Terracotta),
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Contactar", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    AyniButton(
+                                        text = "Ver Perfil",
+                                        onClick = {
+                                            viewModel.selectTechnician(tech)
+                                            viewModel.navigateWithHistory("profile")
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * Provider Profile Screen for Liz Evelyn Obregon Olivera
  */
 @Composable
 fun ProviderProfileScreen(viewModel: AyniViewModel) {
-    val tech = viewModel.lizEvelyn
+    val selectedTechState by viewModel.selectedTechnician.collectAsState()
+    val tech = selectedTechState ?: viewModel.lizEvelyn
     var isBookingFlowOpen by remember { mutableStateOf(false) }
     var selectedZoomedJob by remember { mutableStateOf<String?>(null) } // Facebook style image enlarge
 
@@ -1210,7 +1696,7 @@ fun ProviderProfileScreen(viewModel: AyniViewModel) {
                             .clip(CircleShape)
                             .border(4.dp, Color.White, CircleShape)
                     ) {
-                        DrawLizAvatar(modifier = Modifier.fillMaxSize())
+                        DrawTechnicianAvatar(techId = tech.id, name = tech.name, modifier = Modifier.fillMaxSize())
                     }
 
                     // User name & slogan
@@ -1333,14 +1819,48 @@ fun ProviderProfileScreen(viewModel: AyniViewModel) {
                     Text("Selecciona una foto para ampliarla al estilo Facebook", fontSize = 11.sp, color = TextLight)
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    val portfolioJobs = listOf(
-                        "Princess party" to "Princess Theme Decoration",
-                        "Masha and Bear" to "Masha & Bear Event Setup",
-                        "SpongeBob theme" to "SpongeBob Undersea Birthday",
-                        "Alianza Lima football" to "Alianza Lima Soccer Party",
-                        "Baby Shark marine" to "Baby Shark Balloon Arch",
-                        "Little Mermaid tail" to "Little Mermaid Birthday"
-                    )
+                    val portfolioJobs = when (tech.category) {
+                        "Decoración" -> listOf(
+                            "Princess party" to "Princess Theme Decoration",
+                            "Masha and Bear" to "Masha & Bear Event Setup",
+                            "SpongeBob theme" to "SpongeBob Undersea Birthday",
+                            "Alianza Lima football" to "Alianza Lima Soccer Party",
+                            "Baby Shark marine" to "Baby Shark Balloon Arch",
+                            "Little Mermaid tail" to "Little Mermaid Birthday"
+                        )
+                        "Limpieza" -> listOf(
+                            "Princess party" to "Limpieza de Departamentos",
+                            "Masha and Bear" to "Limpieza de Vidrios y Ventanas",
+                            "SpongeBob theme" to "Limpieza Post-Construcción",
+                            "Alianza Lima football" to "Lavado de Alfombras y Muebles",
+                            "Baby Shark marine" to "Desinfección de Oficinas",
+                            "Little Mermaid tail" to "Limpieza Profunda de Cocinas"
+                        )
+                        "Electricista" -> listOf(
+                            "Princess party" to "Instalación de Luces LED",
+                            "Masha and Bear" to "Instalación de Tableros",
+                            "SpongeBob theme" to "Mantenimiento de Pozos a Tierra",
+                            "Alianza Lima football" to "Cableado Residencial",
+                            "Baby Shark marine" to "Detección de Cortocircuito",
+                            "Little Mermaid tail" to "Instalación de Intercomunicador"
+                        )
+                        "Gasfitería" -> listOf(
+                            "Princess party" to "Instalación de Sanitarios",
+                            "Masha and Bear" to "Reparación de Tuberías",
+                            "SpongeBob theme" to "Limpieza de Trampas de Grasa",
+                            "Alianza Lima football" to "Instalación de Termas",
+                            "Baby Shark marine" to "Detección de Filtraciones",
+                            "Little Mermaid tail" to "Desatoro de Desagües"
+                        )
+                        else -> listOf(
+                            "Princess party" to "Trabajo Completado 1",
+                            "Masha and Bear" to "Trabajo Completado 2",
+                            "SpongeBob theme" to "Trabajo Completado 3",
+                            "Alianza Lima football" to "Trabajo Completado 4",
+                            "Baby Shark marine" to "Trabajo Completado 5",
+                            "Little Mermaid tail" to "Trabajo Completado 6"
+                        )
+                    }
 
                     // Grid layout of 2 columns
                     Column(
@@ -1412,6 +1932,34 @@ fun ProviderProfileScreen(viewModel: AyniViewModel) {
                     )
                     Spacer(modifier = Modifier.height(10.dp))
 
+                    val servicesList = when (tech.category) {
+                        "Decoración" -> listOf(
+                            Triple("Decoración de Eventos Completa", "Incluye fondo, globos temáticos, mesa principal, luces.", tech.basePriceRange),
+                            Triple("Alquiler de Mobiliario", "Mesas cilíndricas, paneles circulares, fondos dorados, estantes.", "Cotizar"),
+                            Triple("Alquiler de Silla Vestida", "Sillas de plástico con forro blanco y lazo de color a elección.", "S/ 1.50 c/u")
+                        )
+                        "Limpieza" -> listOf(
+                            Triple("Limpieza General del Hogar", "Por hora o día completo. Incluye barrido, trapeado, desempolvado general.", tech.basePriceRange),
+                            Triple("Limpieza Profunda de Cocina", "Desengrasado de campana, hornos, azulejos y reposteros.", "S/ 120"),
+                            Triple("Lavado de Alfombras y Muebles", "Lavado profesional de tapices con secado rápido a domicilio.", "S/ 80")
+                        )
+                        "Electricista" -> listOf(
+                            Triple("Diagnóstico de Falla Eléctrica", "Detección de fugas a tierra, cortocircuitos o fallas en llaves diferenciales.", tech.basePriceRange),
+                            Triple("Instalación de Luminarias", "Montaje de reflectores, dicroicos LED, arañas y lámparas decorativas.", "S/ 35 c/u"),
+                            Triple("Instalación de Llaves Termomagnéticas", "Reemplazo e instalación de llaves de protección de tablero.", "S/ 60")
+                        )
+                        "Gasfitería" -> listOf(
+                            Triple("Detección de Fugas de Agua", "Localización de humedad o filtraciones internas con ultrasonido.", tech.basePriceRange),
+                            Triple("Instalación de Sanitarios y Grifería", "Montaje de inodoros, lavamanos, grifos monocomando, duchas.", "S/ 80"),
+                            Triple("Instalación de Termas Eléctricas o Gas", "Conexión segura de termas a red de agua y electricidad.", "S/ 150")
+                        )
+                        else -> listOf(
+                            Triple("Servicio Especializado", "Servicio profesional a domicilio personalizado según el requerimiento.", tech.basePriceRange),
+                            Triple("Asesoría Técnica Básica", "Visita presencial y elaboración de informe técnico detallado.", "S/ 50"),
+                            Triple("Mantenimiento Preventivo", "Revisión periódica de instalaciones para evitar fallas futuras.", "Cotizar")
+                        )
+                    }
+
                     Card(
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1419,46 +1967,23 @@ fun ProviderProfileScreen(viewModel: AyniViewModel) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            // Service 1
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Decoración de Eventos Completa", fontWeight = FontWeight.Bold, color = DarkBrown)
-                                    Text("Incluye fondo, globos temáticos, mesa principal, luces.", fontSize = 12.sp, color = TextLight)
-                                    Text("⚠️ El precio final puede variar según la complejidad.", fontSize = 10.sp, color = Terracotta, fontWeight = FontWeight.Bold)
+                            servicesList.forEachIndexed { index, service ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(service.first, fontWeight = FontWeight.Bold, color = DarkBrown)
+                                        Text(service.second, fontSize = 12.sp, color = TextLight)
+                                        if (index == 0) {
+                                            Text("⚠️ El precio final puede variar según la complejidad.", fontSize = 10.sp, color = Terracotta, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    Text(service.third, fontWeight = FontWeight.Bold, color = Terracotta)
                                 }
-                                Text("S/ 120 - 750", fontWeight = FontWeight.Bold, color = Terracotta)
-                            }
-
-                            Divider(modifier = Modifier.padding(vertical = 12.dp), color = GrayBorder)
-
-                            // Service 2
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Alquiler de Mobiliario", fontWeight = FontWeight.Bold, color = DarkBrown)
-                                    Text("Mesas cilíndricas, paneles circulares, fondos dorados, estantes.", fontSize = 12.sp, color = TextLight)
-                                    Text("⚠️ Depende del servicio o cantidad solicitada.", fontSize = 10.sp, color = Terracotta, fontWeight = FontWeight.Bold)
+                                if (index < servicesList.size - 1) {
+                                    Divider(modifier = Modifier.padding(vertical = 12.dp), color = GrayBorder)
                                 }
-                                Text("Cotizar", fontWeight = FontWeight.Bold, color = Terracotta)
-                            }
-
-                            Divider(modifier = Modifier.padding(vertical = 12.dp), color = GrayBorder)
-
-                            // Service 3
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Alquiler de Silla Vestida", fontWeight = FontWeight.Bold, color = DarkBrown)
-                                    Text("Sillas de plástico con forro blanco y lazo de color a elección.", fontSize = 12.sp, color = TextLight)
-                                }
-                                Text("S/ 1.50 c/u", fontWeight = FontWeight.Bold, color = Terracotta)
                             }
                         }
                     }

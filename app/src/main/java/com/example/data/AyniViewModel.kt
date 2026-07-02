@@ -95,6 +95,16 @@ class AyniViewModel(application: Application) : AndroidViewModel(application) {
     private val _showNearbyProfessionals = MutableStateFlow(false)
     val showNearbyProfessionals = _showNearbyProfessionals.asStateFlow()
 
+    // Selected technician for details
+    private val _selectedTechnician = MutableStateFlow<Technician?>(null)
+    val selectedTechnician = _selectedTechnician.asStateFlow()
+
+    fun selectTechnician(tech: Technician) {
+        _selectedTechnician.value = tech
+    }
+
+    val allTechniciansList: List<Technician> get() = otherTechnicians
+
     // Technicians list
     val lizEvelyn = Technician(
         id = "liz_evelyn",
